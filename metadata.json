@@ -1,0 +1,6 @@
+{
+  "name": "OmniContent Studio",
+  "description": "Enterprise multi-source content intelligence platform: ingest video, audio, files, and web search to pitch angles, craft long-form blog posts, and generate podcast and video workflows.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
