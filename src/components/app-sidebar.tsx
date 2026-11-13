@@ -24,13 +24,12 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
 } from "@/components/ui/sidebar";
 
 const userData = {
-  name: "Enterprise Editorial Lead",
-  email: "editor@enterprise-corp.ai",
-  avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80",
+  name: "Editorial Workspace",
+  email: "studio@omnicontent.app",
+  avatar: "",
 };
 
 const navMainItems: NavItem[] = [
@@ -38,13 +37,11 @@ const navMainItems: NavItem[] = [
     id: "dashboard",
     title: "Command Center",
     icon: IconDashboard,
-    badge: "Live",
   },
   {
     id: "sources",
     title: "Sources & Search",
     icon: IconFolders,
-    badge: "Multi",
   },
   {
     id: "pitch",
@@ -55,7 +52,6 @@ const navMainItems: NavItem[] = [
     id: "blog",
     title: "Blog Studio",
     icon: IconFileText,
-    badge: "AI",
   },
   {
     id: "podcast",
@@ -87,7 +83,7 @@ const navSecondaryItems: NavSecondaryItem[] = [
   },
   {
     id: "connections",
-    title: "Integrations & APIs",
+    title: "Publishing & Export",
     icon: IconPlugConnected,
   },
   {
@@ -137,8 +133,8 @@ export function AppSidebar({
                 <span className="truncate text-base font-semibold tracking-tight">
                   OmniContent
                 </span>
-                <span className="truncate text-xs text-muted-foreground uppercase font-mono tracking-wider">
-                  Enterprise Studio
+                <span className="truncate text-xs text-muted-foreground">
+                  Content Studio
                 </span>
               </div>
             </SidebarMenuButton>
@@ -164,7 +160,6 @@ export function AppSidebar({
       <SidebarFooter>
         <NavUser user={userData} onOpenProfile={() => onSelectTab("settings")} />
       </SidebarFooter>
-      <SidebarRail />
     </Sidebar>
   );
 }

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useContent } from "@/context/ContentContext";
+import { toast } from "sonner";
 
 export function WebSearchCard() {
   const { addSource } = useContent();
@@ -28,11 +29,12 @@ export function WebSearchCard() {
         body: JSON.stringify({ query: query.trim() }),
       });
 
-      if (!res.ok) throw new Error("Search grounding failed");
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Search grounding failed");
       setSearchResult(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error searching web:", err);
+      toast.error(err?.message || "Web search failed.");
     } finally {
       setIsSearching(false);
     }
@@ -60,20 +62,18 @@ export function WebSearchCard() {
       setSearchResult(null);
       setQuery("");
       setAdded(false);
-    }, 1500);
+    }, 1200);
   };
 
   return (
     <Card className="border-border">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
-          <div className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <IconSearch className="size-4" />
-          </div>
+          <IconSearch className="size-4 text-primary" />
           <div>
             <CardTitle className="text-sm font-semibold">Live Web Search Grounding</CardTitle>
             <CardDescription className="text-xs">
-              Execute broad topic research using real-time Google Search grounding
+              Execute topic research using live Google Search grounding
             </CardDescription>
           </div>
         </div>
@@ -81,7 +81,7 @@ export function WebSearchCard() {
       <CardContent className="space-y-3">
         <form onSubmit={handleSearch} className="flex gap-2">
           <Input
-            placeholder="e.g. enterprise generative media trends 2026, cloud data sovereignty..."
+            placeholder="e.g. B2B SaaS churn benchmarks 2026..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="text-xs h-9 bg-background"
@@ -95,11 +95,11 @@ export function WebSearchCard() {
             {isSearching ? (
               <>
                 <IconLoader className="size-3.5 animate-spin mr-1" />
-                Grounding...
+                Searching...
               </>
             ) : (
               <>
-                <IconSparkles className="size-3.5 mr-1 text-primary-foreground" />
+                <IconSparkles className="size-3.5 mr-1" />
                 Search Web
               </>
             )}
@@ -113,7 +113,7 @@ export function WebSearchCard() {
                 <Badge variant="outline" className="text-[10px] font-mono">
                   Grounded Results
                 </Badge>
-                {searchResult.groundingChunks?.length || 0} citations retrieved
+                {searchResult.groundingChunks?.length || 0} citations
               </span>
               <Button
                 size="sm"
@@ -125,10 +125,10 @@ export function WebSearchCard() {
                 {added ? (
                   <>
                     <IconCheck className="size-3.5 mr-1" />
-                    Added to Sources
+                    Added
                   </>
                 ) : (
-                  "+ Ingest into Sources"
+                  "+ Add to Sources"
                 )}
               </Button>
             </div>
@@ -138,14 +138,11 @@ export function WebSearchCard() {
             </p>
 
             {searchResult.extractedHighlights?.length > 0 && (
-              <div className="space-y-1">
-                <div className="text-[11px] font-medium text-foreground">Extracted Highlights:</div>
-                <ul className="text-[11px] text-muted-foreground list-disc pl-4 space-y-0.5">
-                  {searchResult.extractedHighlights.slice(0, 3).map((h: string, idx: number) => (
-                    <li key={idx} className="line-clamp-1">{h}</li>
-                  ))}
-                </ul>
-              </div>
+              <ul className="text-[11px] text-muted-foreground list-disc pl-4 space-y-0.5">
+                {searchResult.extractedHighlights.slice(0, 3).map((h: string, idx: number) => (
+                  <li key={idx} className="line-clamp-1">{h}</li>
+                ))}
+              </ul>
             )}
 
             {searchResult.groundingChunks?.length > 0 && (

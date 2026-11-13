@@ -70,6 +70,7 @@ export interface PodcastEpisode {
   chapters: PodcastChapter[];
   dialogue: PodcastDialogueTurn[];
   createdAt: string;
+  audioDataUrl?: string;
 }
 
 export interface VideoScene {
@@ -80,13 +81,16 @@ export interface VideoScene {
   aiImagePrompt: string;
   onScreenText: string;
   voiceoverNarration: string;
+  audioDataUrl?: string;
 }
 
 export interface VideoStoryboard {
   id: string;
   blogPostId: string;
+  sourceTitle?: string;
   videoTitle: string;
   format: string;
+  voiceName?: string;
   totalDurationSeconds: number;
   scenes: VideoScene[];
   createdAt: string;
@@ -100,4 +104,5 @@ export interface SystemSettings {
   autoRepurposeToPodcast: boolean;
   autoRepurposeToVideo: boolean;
   defaultCategory: string;
+  webhookUrl?: string;
 }

@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   IconVideo,
   IconHeadphones,
   IconFileUpload,
   IconPlus,
+  IconUpload,
+  IconLoader,
 } from "@tabler/icons-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -12,109 +14,145 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useContent } from "@/context/ContentContext";
+import { toast } from "sonner";
+import type { SourceType } from "@/types/content";
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const idx = result.indexOf(",");
+      resolve(idx >= 0 ? result.slice(idx + 1) : result);
+    };
+    reader.onerror = () => reject(new Error("Failed to read file."));
+    reader.readAsDataURL(file);
+  });
+}
 
 export function SourceUploadCard() {
   const { addSource } = useContent();
-  const [activeTab, setActiveTab] = useState("video");
+  const [activeTab, setActiveTab] = useState<SourceType>("video");
+  const [isIngesting, setIsIngesting] = useState(false);
 
-  // Video Form State
-  const [videoTitle, setVideoTitle] = useState("");
-  const [videoUrl, setVideoUrl] = useState("");
-  const [videoDuration, setVideoDuration] = useState("18:30");
-  const [videoTranscript, setVideoTranscript] = useState("");
+  const [title, setTitle] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [duration, setDuration] = useState("");
+  const [pastedText, setPastedText] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Audio Form State
-  const [audioTitle, setAudioTitle] = useState("");
-  const [audioSpeaker, setAudioSpeaker] = useState("Executive Interview");
-  const [audioDuration, setAudioDuration] = useState("24:10");
-  const [audioTranscript, setAudioTranscript] = useState("");
-
-  // Document Form State
-  const [docTitle, setDocTitle] = useState("");
-  const [docCategory, setDocCategory] = useState("Whitepaper");
-  const [docContent, setDocContent] = useState("");
-  const [fileName, setFileName] = useState("");
-
-  const handleAddVideo = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!videoTitle) return;
-
-    addSource({
-      type: "video",
-      title: videoTitle,
-      sourceUrl: videoUrl || "https://internal-media.corp.net/recordings/webinar.mp4",
-      duration: videoDuration || "15:00",
-      summary: videoTranscript ? videoTranscript.slice(0, 180) + "..." : "Recorded enterprise session covering core technical updates and market milestones.",
-      highlights: [
-        "Key product release architecture explained with technical diagrams.",
-        "Addressing scalability bottlenecks in enterprise deployments.",
-        "Roadmap highlights for the upcoming fiscal quarter.",
-      ],
-      rawContent: videoTranscript || "Full video transcript and audio track extraction.",
-      tags: ["Video Asset", "Keynote", "Product Demo"],
-    });
-
-    setVideoTitle("");
-    setVideoUrl("");
-    setVideoTranscript("");
+  const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setSelectedFile(file);
+    if (file && !title) {
+      setTitle(file.name.replace(/\.[^.]+$/, ""));
+    }
   };
 
-  const handleAddAudio = (e: React.FormEvent) => {
+  const handleIngest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!audioTitle) return;
+    if (!selectedFile && !pastedText.trim()) {
+      toast.error("Upload a file or paste transcript/document text first.");
+      return;
+    }
 
-    addSource({
-      type: "audio",
-      title: audioTitle,
-      duration: audioDuration || "20:00",
-      summary: audioTranscript ? audioTranscript.slice(0, 180) + "..." : `Recorded discussion featuring ${audioSpeaker} addressing organizational strategy and technology roadmaps.`,
-      highlights: [
-        "First-person account of migration from legacy stack to automated pipelines.",
-        "Cost considerations and budget justification for C-Suite executives.",
-        "Change management recommendations for editorial and engineering teams.",
-      ],
-      rawContent: audioTranscript || `Audio transcription log for ${audioTitle}`,
-      tags: ["Audio Interview", "Podcast Source", audioSpeaker],
-    });
+    setIsIngesting(true);
+    try {
+      let textContent = pastedText.trim();
+      let base64Data: string | undefined;
+      let mimeType: string | undefined;
+      let fileName: string | undefined;
+      let fileSize: string | undefined;
 
-    setAudioTitle("");
-    setAudioTranscript("");
+      if (selectedFile) {
+        fileName = selectedFile.name;
+        fileSize = `${(selectedFile.size / (1024 * 1024)).toFixed(2)} MB`;
+        mimeType = selectedFile.type || "application/octet-stream";
+
+        const isPlainText =
+          mimeType.startsWith("text/") ||
+          /\.(txt|md|csv|json)$/i.test(selectedFile.name);
+
+        if (isPlainText && !textContent) {
+          textContent = await selectedFile.text();
+        } else if (!textContent) {
+          if (selectedFile.size > 20 * 1024 * 1024) {
+            throw new Error("File exceeds 20 MB upload limit. Paste transcript text or use a smaller clip.");
+          }
+          base64Data = await readFileAsBase64(selectedFile);
+        }
+      }
+
+      const res = await fetch("/api/sources/ingest-file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim() || fileName || "Ingested Source",
+          fileName,
+          mimeType,
+          base64Data,
+          textContent: textContent || undefined,
+          sourceType: activeTab,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || `Ingestion failed (${res.status})`);
+      }
+
+      addSource({
+        type: activeTab,
+        title: title.trim() || data.title || fileName || "Ingested Source",
+        sourceUrl: sourceUrl.trim() || undefined,
+        fileName,
+        fileSize,
+        duration: duration.trim() || undefined,
+        summary: data.summary,
+        highlights: data.highlights || [],
+        rawContent: data.rawContent,
+        tags: data.tags || [activeTab],
+      });
+
+      setTitle("");
+      setSourceUrl("");
+      setDuration("");
+      setPastedText("");
+      setSelectedFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to ingest source.");
+    } finally {
+      setIsIngesting(false);
+    }
   };
 
-  const handleAddDocument = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!docTitle) return;
-
-    addSource({
-      type: "file",
-      title: docTitle,
-      fileName: fileName || `${docTitle.toLowerCase().replace(/\s+/g, "_")}.pdf`,
-      fileSize: "3.2 MB",
-      summary: docContent ? docContent.slice(0, 180) + "..." : "Authoritative enterprise reference documentation outlining architectural standards and compliance criteria.",
-      highlights: [
-        "Regulatory compliance requirements for multi-region operations.",
-        "Benchmark comparison across competing architectural models.",
-        "Recommended checklists for production deployment.",
-      ],
-      rawContent: docContent || "Extracted textual content from verified enterprise file.",
-      tags: ["Document", docCategory, "Whitepaper"],
-    });
-
-    setDocTitle("");
-    setDocContent("");
-    setFileName("");
-  };
+  const acceptTypes =
+    activeTab === "video"
+      ? "video/*,.mp4,.webm,.mov,.txt,.md"
+      : activeTab === "audio"
+      ? "audio/*,.mp3,.wav,.m4a,.ogg,.webm,.txt"
+      : ".pdf,.txt,.md,.csv,.json,application/pdf,text/*";
 
   return (
     <Card className="border-border">
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-semibold">Media & File Ingestion Engine</CardTitle>
+        <CardTitle className="text-sm font-semibold">Media & Document Ingestion</CardTitle>
         <CardDescription className="text-xs">
-          Upload video recordings, podcast audio interviews, or research whitepapers
+          Upload video, audio, or PDF/text files for real AI transcription and highlight extraction, or paste raw text
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => {
+            setActiveTab(v as SourceType);
+            setSelectedFile(null);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+          }}
+          className="w-full"
+        >
           <TabsList className="grid grid-cols-3 w-full mb-3">
             <TabsTrigger value="video" className="text-xs gap-1.5 cursor-pointer">
               <IconVideo className="size-3.5" />
@@ -130,160 +168,100 @@ export function SourceUploadCard() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Video Tab */}
-          <TabsContent value="video" className="space-y-3 mt-0">
-            <form onSubmit={handleAddVideo} className="space-y-3">
+          <TabsContent value={activeTab} className="mt-0">
+            <form onSubmit={handleIngest} className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div className="space-y-1">
-                  <Label className="text-xs">Video Title / Topic</Label>
+                  <Label className="text-xs">Source Title</Label>
                   <Input
-                    placeholder="e.g. 2026 Keynote: Next-Gen Media"
-                    value={videoTitle}
-                    onChange={(e) => setVideoTitle(e.target.value)}
+                    placeholder="e.g. Q4 Product Briefing"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
                     className="text-xs h-8"
-                    required
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">Video URL / File Source</Label>
-                  <Input
-                    placeholder="YouTube link, MP4 URL, or internal S3"
-                    value={videoUrl}
-                    onChange={(e) => setVideoUrl(e.target.value)}
-                    className="text-xs h-8"
-                  />
+                  <Label className="text-xs">
+                    {activeTab === "file" ? "Upload File (PDF, TXT, MD, CSV)" : "Upload Media File (up to 20 MB)"}
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      ref={fileInputRef}
+                      type="file"
+                      accept={acceptTypes}
+                      onChange={handleFilePick}
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="h-8 text-xs w-full justify-start truncate cursor-pointer"
+                    >
+                      <IconUpload className="size-3.5 mr-1.5 shrink-0" />
+                      <span className="truncate">
+                        {selectedFile ? selectedFile.name : "Choose file..."}
+                      </span>
+                    </Button>
+                  </div>
                 </div>
               </div>
 
+              {activeTab !== "file" && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Reference URL (Optional)</Label>
+                    <Input
+                      placeholder="https://..."
+                      value={sourceUrl}
+                      onChange={(e) => setSourceUrl(e.target.value)}
+                      className="text-xs h-8"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Duration (Optional)</Label>
+                    <Input
+                      placeholder="e.g. 12:30"
+                      value={duration}
+                      onChange={(e) => setDuration(e.target.value)}
+                      className="text-xs h-8"
+                    />
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-1">
-                <Label className="text-xs">Video Transcript / Key Timestamps</Label>
+                <Label className="text-xs">
+                  Or Paste Transcript / Document Text Directly
+                </Label>
                 <Textarea
-                  placeholder="Paste video speech transcript, speaker notes, or meeting takeaways..."
-                  rows={2}
-                  value={videoTranscript}
-                  onChange={(e) => setVideoTranscript(e.target.value)}
+                  placeholder="Paste full transcript, notes, or document text to analyze..."
+                  rows={3}
+                  value={pastedText}
+                  onChange={(e) => setPastedText(e.target.value)}
                   className="text-xs resize-none"
                 />
               </div>
 
-              <div className="flex items-center justify-between pt-1">
-                <div className="flex items-center gap-2">
-                  <Label className="text-[11px] text-muted-foreground">Duration:</Label>
-                  <Input
-                    value={videoDuration}
-                    onChange={(e) => setVideoDuration(e.target.value)}
-                    className="text-xs h-7 w-20"
-                  />
-                </div>
-                <Button type="submit" size="sm" className="h-8 text-xs cursor-pointer">
-                  <IconPlus className="size-3.5 mr-1" />
-                  Ingest Video Source
-                </Button>
-              </div>
-            </form>
-          </TabsContent>
-
-          {/* Audio Tab */}
-          <TabsContent value="audio" className="space-y-3 mt-0">
-            <form onSubmit={handleAddAudio} className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div className="space-y-1">
-                  <Label className="text-xs">Interview / Recording Title</Label>
-                  <Input
-                    placeholder="e.g. C-Suite Roundtable on Data Governance"
-                    value={audioTitle}
-                    onChange={(e) => setAudioTitle(e.target.value)}
-                    className="text-xs h-8"
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Key Speaker / Guests</Label>
-                  <Input
-                    placeholder="e.g. CTO & Head of Research"
-                    value={audioSpeaker}
-                    onChange={(e) => setAudioSpeaker(e.target.value)}
-                    className="text-xs h-8"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs">Audio Transcript / Quotes</Label>
-                <Textarea
-                  placeholder="Paste audio dialogue, interview quotes, or speaker notes..."
-                  rows={2}
-                  value={audioTranscript}
-                  onChange={(e) => setAudioTranscript(e.target.value)}
-                  className="text-xs resize-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-between pt-1">
-                <div className="flex items-center gap-2">
-                  <Label className="text-[11px] text-muted-foreground">Duration:</Label>
-                  <Input
-                    value={audioDuration}
-                    onChange={(e) => setAudioDuration(e.target.value)}
-                    className="text-xs h-7 w-20"
-                  />
-                </div>
-                <Button type="submit" size="sm" className="h-8 text-xs cursor-pointer">
-                  <IconPlus className="size-3.5 mr-1" />
-                  Ingest Audio Interview
-                </Button>
-              </div>
-            </form>
-          </TabsContent>
-
-          {/* Document Tab */}
-          <TabsContent value="file" className="space-y-3 mt-0">
-            <form onSubmit={handleAddDocument} className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div className="space-y-1">
-                  <Label className="text-xs">Document Title</Label>
-                  <Input
-                    placeholder="e.g. 2026 Cloud Scalability Whitepaper"
-                    value={docTitle}
-                    onChange={(e) => setDocTitle(e.target.value)}
-                    className="text-xs h-8"
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">File Attachment / Name</Label>
-                  <Input
-                    placeholder="e.g. Q3_Compliance_Audit.pdf"
-                    value={fileName}
-                    onChange={(e) => setFileName(e.target.value)}
-                    className="text-xs h-8"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs">Document Excerpts / Text</Label>
-                <Textarea
-                  placeholder="Paste whitepaper executive summary, table metrics, or core findings..."
-                  rows={2}
-                  value={docContent}
-                  onChange={(e) => setDocContent(e.target.value)}
-                  className="text-xs resize-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-between pt-1">
-                <div className="flex items-center gap-2">
-                  <Label className="text-[11px] text-muted-foreground">Category:</Label>
-                  <Input
-                    value={docCategory}
-                    onChange={(e) => setDocCategory(e.target.value)}
-                    className="text-xs h-7 w-28"
-                  />
-                </div>
-                <Button type="submit" size="sm" className="h-8 text-xs cursor-pointer">
-                  <IconPlus className="size-3.5 mr-1" />
-                  Ingest Document
+              <div className="flex justify-end pt-1">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={isIngesting || (!selectedFile && !pastedText.trim())}
+                  className="h-8 text-xs cursor-pointer"
+                >
+                  {isIngesting ? (
+                    <>
+                      <IconLoader className="size-3.5 mr-1 animate-spin" />
+                      Transcribing & Extracting...
+                    </>
+                  ) : (
+                    <>
+                      <IconPlus className="size-3.5 mr-1" />
+                      Ingest & Analyze
+                    </>
+                  )}
                 </Button>
               </div>
             </form>

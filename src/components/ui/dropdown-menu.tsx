@@ -7,34 +7,10 @@ import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
 import { cn } from "@/lib/utils";
 
 function DropdownMenu({
-  className,
-  placement,
-  children,
   ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Root> & {
-  className?: string;
-  placement?: string;
-}) {
-  if (placement !== undefined || className) {
-    const side = placement?.startsWith("top")
-      ? "top"
-      : placement?.startsWith("bottom")
-        ? "bottom"
-        : undefined;
-    const align = placement?.includes("start")
-      ? "start"
-      : placement?.includes("end")
-        ? "end"
-        : undefined;
-    return (
-      <DropdownMenuContent side={side} align={align} className={className} {...(props as any)}>
-        {children}
-      </DropdownMenuContent>
-    );
-  }
-  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props}>{children}</DropdownMenuPrimitive.Root>;
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
+  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
 }
-DropdownMenu.displayName = "DropdownMenu";
 
 function DropdownMenuPortal({
   ...props
@@ -45,41 +21,13 @@ function DropdownMenuPortal({
 }
 
 function DropdownMenuTrigger({
-  children,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
-  const childArray = React.Children.toArray(children);
-  const menuChild = childArray.find(
-    (child) =>
-      React.isValidElement(child) &&
-      (child.type === DropdownMenu ||
-        (child.type as any)?.displayName === "DropdownMenu" ||
-        child.type === DropdownMenuContent),
-  );
-
-  if (menuChild && React.isValidElement(menuChild)) {
-    const triggerChildren = childArray.filter((c) => c !== menuChild);
-    return (
-      <DropdownMenuPrimitive.Root>
-        <DropdownMenuPrimitive.Trigger asChild {...props}>
-          {triggerChildren.length === 1 && React.isValidElement(triggerChildren[0]) ? (
-            triggerChildren[0]
-          ) : (
-            <span>{triggerChildren}</span>
-          )}
-        </DropdownMenuPrimitive.Trigger>
-        {menuChild}
-      </DropdownMenuPrimitive.Root>
-    );
-  }
-
   return (
     <DropdownMenuPrimitive.Trigger
       data-slot="dropdown-menu-trigger"
       {...props}
-    >
-      {children}
-    </DropdownMenuPrimitive.Trigger>
+    />
   );
 }
 

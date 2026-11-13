@@ -3,7 +3,6 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
-import { SidebarRight } from "@/components/sidebar-right";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { ContentProvider, useContent } from "@/context/ContentContext";
 
@@ -68,13 +67,11 @@ function StudioLayout() {
     >
       <AppSidebar
         variant="inset"
-        side="left"
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         onQuickCreate={handleQuickCreate}
         sourcesCount={sources.length}
       />
-
       <SidebarInset>
         <SiteHeader
           activeTab={activeTab}
@@ -85,8 +82,6 @@ function StudioLayout() {
           {renderActiveView()}
         </main>
       </SidebarInset>
-
-      <SidebarRight />
     </SidebarProvider>
   );
 }

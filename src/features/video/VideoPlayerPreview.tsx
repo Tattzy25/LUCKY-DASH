@@ -4,200 +4,348 @@ import {
   IconPlayerPause,
   IconPlayerSkipBack,
   IconPlayerSkipForward,
-  IconSparkles,
+  IconVolume,
+  IconVolumeOff,
   IconMaximize,
-  IconClock,
+  IconDownload,
+  IconVideo,
 } from "@tabler/icons-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { ButtonGroup } from "@/components/ui/button-group";
+import { Slider } from "@/components/ui/slider";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
+import { drawSceneFrame, getVideoDimensions } from "@/features/video/videoRenderer";
 import type { VideoStoryboard } from "@/types/content";
 
 interface VideoPlayerPreviewProps {
   storyboard: VideoStoryboard;
   activeSceneIndex: number;
   onSceneChange: (index: number) => void;
+  renderedVideoUrl: string | null;
+  onDownloadRenderedVideo: () => void;
 }
 
 export function VideoPlayerPreview({
   storyboard,
   activeSceneIndex,
   onSceneChange,
+  renderedVideoUrl,
+  onDownloadRenderedVideo,
 }: VideoPlayerPreviewProps) {
+  const [viewMode, setViewMode] = useState<"preview" | "rendered">(
+    renderedVideoUrl ? "rendered" : "preview"
+  );
   const [isPlaying, setIsPlaying] = useState(false);
-  const synthRef = useRef<SpeechSynthesis | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [sceneProgress, setSceneProgress] = useState(0);
 
-  const activeScene = storyboard.scenes[activeSceneIndex] || storyboard.scenes[0];
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const safeIndex = Math.min(activeSceneIndex, Math.max(0, storyboard.scenes.length - 1));
+  const activeScene = storyboard.scenes[safeIndex];
+  const { width, height } = getVideoDimensions(storyboard.format);
+  const ratio = width / height;
 
   useEffect(() => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      synthRef.current = window.speechSynthesis;
+    if (renderedVideoUrl) {
+      setViewMode("rendered");
+      setIsPlaying(false);
+    } else {
+      setViewMode("preview");
     }
-    return () => {
-      if (synthRef.current) synthRef.current.cancel();
-    };
-  }, []);
+  }, [renderedVideoUrl]);
 
-  // Voice narration and auto-advance
   useEffect(() => {
-    if (!isPlaying) {
-      if (synthRef.current) synthRef.current.cancel();
+    const canvas = canvasRef.current;
+    if (!canvas || !activeScene) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    drawSceneFrame(
+      ctx,
+      width,
+      height,
+      activeScene,
+      safeIndex,
+      storyboard.scenes.length,
+      isPlaying ? sceneProgress : 1,
+      storyboard.videoTitle
+    );
+  }, [activeScene, safeIndex, storyboard.scenes.length, storyboard.videoTitle, width, height, sceneProgress, isPlaying]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.muted = isMuted;
+    }
+  }, [isMuted]);
+
+  useEffect(() => {
+    if (viewMode !== "preview" || !isPlaying || !activeScene) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
       return;
     }
 
-    if (synthRef.current) {
-      synthRef.current.cancel();
-      const utterance = new SpeechSynthesisUtterance(activeScene.voiceoverNarration);
-      utterance.rate = 1.05;
+    let rafId = 0;
+    let cancelled = false;
+    const audioEl = audioRef.current;
+    const fallbackDurationMs = Math.max(2000, (activeScene.durationSeconds || 8) * 1000);
+    const startTime = performance.now();
 
-      utterance.onend = () => {
-        if (activeSceneIndex + 1 < storyboard.scenes.length) {
-          onSceneChange(activeSceneIndex + 1);
+    const advanceToNext = () => {
+      if (cancelled) return;
+      if (safeIndex + 1 < storyboard.scenes.length) {
+        setSceneProgress(0);
+        onSceneChange(safeIndex + 1);
+      } else {
+        setIsPlaying(false);
+        setSceneProgress(0);
+        onSceneChange(0);
+      }
+    };
+
+    if (activeScene.audioDataUrl && audioEl) {
+      audioEl.src = activeScene.audioDataUrl;
+      audioEl.currentTime = 0;
+      audioEl.muted = isMuted;
+      audioEl.play().catch(() => {});
+
+      const onEnded = () => advanceToNext();
+      audioEl.addEventListener("ended", onEnded);
+
+      const tickAudio = () => {
+        if (cancelled) return;
+        const dur = audioEl.duration && isFinite(audioEl.duration) ? audioEl.duration : activeScene.durationSeconds || 8;
+        setSceneProgress(Math.min(1, audioEl.currentTime / Math.max(0.5, dur)));
+        rafId = requestAnimationFrame(tickAudio);
+      };
+      rafId = requestAnimationFrame(tickAudio);
+
+      return () => {
+        cancelled = true;
+        cancelAnimationFrame(rafId);
+        audioEl.removeEventListener("ended", onEnded);
+        audioEl.pause();
+      };
+    } else {
+      const tickTimer = () => {
+        if (cancelled) return;
+        const elapsed = performance.now() - startTime;
+        const pct = Math.min(1, elapsed / fallbackDurationMs);
+        setSceneProgress(pct);
+        if (elapsed >= fallbackDurationMs) {
+          advanceToNext();
         } else {
-          setIsPlaying(false);
-          onSceneChange(0);
+          rafId = requestAnimationFrame(tickTimer);
         }
       };
+      rafId = requestAnimationFrame(tickTimer);
 
-      utterance.onerror = () => {
-        setIsPlaying(false);
+      return () => {
+        cancelled = true;
+        cancelAnimationFrame(rafId);
       };
-
-      synthRef.current.speak(utterance);
     }
-  }, [isPlaying, activeSceneIndex]);
+  }, [viewMode, isPlaying, safeIndex, activeScene, storyboard.scenes.length, isMuted, onSceneChange]);
 
-  const handleTogglePlay = () => {
-    setIsPlaying(!isPlaying);
+  if (!activeScene) {
+    return (
+      <Empty className="border">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <IconVideo />
+          </EmptyMedia>
+          <EmptyTitle>No scenes in storyboard</EmptyTitle>
+          <EmptyDescription>Add a scene below or regenerate the storyboard.</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    );
+  }
+
+  const totalDurationSec = storyboard.scenes.reduce((acc, s) => acc + (s.durationSeconds || 6), 0);
+  const elapsedBeforeScene = storyboard.scenes
+    .slice(0, safeIndex)
+    .reduce((acc, s) => acc + (s.durationSeconds || 6), 0);
+  const currentElapsedSec = Math.round(
+    elapsedBeforeScene + (activeScene.durationSeconds || 6) * (isPlaying ? sceneProgress : 0)
+  );
+
+  const formatTime = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   };
 
-  const handleNext = () => {
-    if (activeSceneIndex + 1 < storyboard.scenes.length) {
-      onSceneChange(activeSceneIndex + 1);
+  const handleFullscreen = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      el.requestFullscreen?.().catch(() => {});
     }
   };
 
-  const handlePrev = () => {
-    if (activeSceneIndex > 0) {
-      onSceneChange(activeSceneIndex - 1);
-    }
-  };
+  const overallPercent =
+    storyboard.scenes.length > 0
+      ? ((safeIndex + (isPlaying ? sceneProgress : 0)) / storyboard.scenes.length) * 100
+      : 0;
 
   return (
-    <Card className="border-border overflow-hidden bg-black text-white shadow-md">
-      {/* 16:9 Cinematic Video Frame */}
-      <div className="relative aspect-video w-full overflow-hidden bg-gradient-to-br from-neutral-950 via-slate-900 to-sky-950 flex flex-col justify-between p-6 sm:p-8 select-none">
-        {/* Animated Cybernetic Grid Backdrop */}
-        <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:16px_16px]" />
-        <div className="absolute -top-24 -right-24 size-96 rounded-full bg-primary/20 blur-3xl pointer-events-none" />
-
-        {/* Top Video Header */}
-        <div className="relative z-10 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="flex size-2 rounded-full bg-red-500 animate-pulse" />
-            <Badge variant="outline" className="text-[10px] uppercase font-mono text-primary border-primary/40 bg-black/60">
-              Scene {activeScene.sceneNumber} of {storyboard.scenes.length}
-            </Badge>
-            <span className="text-xs text-neutral-400 font-mono hidden sm:inline">
-              {activeScene.durationSeconds}s Duration
-            </span>
-          </div>
-
-          <Badge variant="secondary" className="text-[10px] font-mono bg-black/50 text-neutral-300">
-            {storyboard.format}
-          </Badge>
-        </div>
-
-        {/* Center Scene Title & Visual Preview Description */}
-        <div className="relative z-10 my-auto text-center max-w-2xl mx-auto space-y-3">
-          <div className="inline-block rounded-full bg-primary/15 border border-primary/30 px-3 py-1 text-[11px] font-mono text-cyan-300 tracking-wide uppercase">
-            {activeScene.title}
-          </div>
-
-          <h2 className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-white drop-shadow-sm uppercase">
-            {activeScene.onScreenText}
-          </h2>
-
-          <p className="text-xs sm:text-sm text-neutral-300 line-clamp-2 max-w-lg mx-auto bg-black/40 backdrop-blur rounded p-2 border border-white/10 font-mono text-[11px]">
-            Visual: {activeScene.visualDescription}
-          </p>
-        </div>
-
-        {/* Bottom Voiceover Narration Subtitles & Scrubber */}
-        <div className="relative z-10 space-y-2">
-          {/* Subtitle Banner */}
-          <div className="rounded-lg bg-black/75 backdrop-blur border border-white/10 p-2.5 text-center">
-            <p className="text-xs sm:text-sm text-neutral-100 font-medium italic">
-              "{activeScene.voiceoverNarration}"
-            </p>
-          </div>
-
-          {/* Progress Timeline Dots */}
-          <div className="flex items-center justify-between gap-1 pt-1">
-            {storyboard.scenes.map((scene, idx) => (
-              <button
-                key={idx}
-                onClick={() => onSceneChange(idx)}
-                className={`h-1.5 flex-1 rounded-full transition-all cursor-pointer ${
-                  idx === activeSceneIndex
-                    ? "bg-primary shadow-sm ring-1 ring-primary/80"
-                    : idx < activeSceneIndex
-                    ? "bg-primary/50"
-                    : "bg-white/20"
-                }`}
-                title={`Scene ${scene.sceneNumber}: ${scene.title}`}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Video Player Bottom Controls Bar */}
-      <CardContent className="p-3 bg-neutral-900 border-t border-border flex items-center justify-between gap-3 text-white">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handlePrev}
-            disabled={activeSceneIndex === 0}
-            className="size-8 text-neutral-300 hover:text-white hover:bg-neutral-800 cursor-pointer"
+    <Card className="border-border overflow-hidden">
+      {renderedVideoUrl && (
+        <CardHeader className="flex flex-row items-center justify-between py-2.5 px-4 border-b border-border">
+          <Tabs
+            value={viewMode}
+            onValueChange={(v) => {
+              const mode = v as "preview" | "rendered";
+              setViewMode(mode);
+              if (mode === "rendered") setIsPlaying(false);
+            }}
           >
-            <IconPlayerSkipBack className="size-4" />
-          </Button>
+            <TabsList className="h-8">
+              <TabsTrigger value="rendered" className="text-xs cursor-pointer">
+                Compiled Video (.WebM)
+              </TabsTrigger>
+              <TabsTrigger value="preview" className="text-xs cursor-pointer">
+                Scene Canvas Preview
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
           <Button
-            size="icon"
-            onClick={handleTogglePlay}
-            className="size-9 bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer shadow-sm"
+            size="sm"
+            variant="secondary"
+            onClick={onDownloadRenderedVideo}
+            className="h-8 text-xs gap-1.5 cursor-pointer"
           >
-            {isPlaying ? (
-              <IconPlayerPause className="size-4" />
-            ) : (
-              <IconPlayerPlay className="size-4 ml-0.5" />
-            )}
+            <IconDownload className="size-3.5" />
+            Download .WebM
           </Button>
+        </CardHeader>
+      )}
 
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleNext}
-            disabled={activeSceneIndex >= storyboard.scenes.length - 1}
-            className="size-8 text-neutral-300 hover:text-white hover:bg-neutral-800 cursor-pointer"
-          >
-            <IconPlayerSkipForward className="size-4" />
-          </Button>
+      {viewMode === "rendered" && renderedVideoUrl ? (
+        <CardContent className="p-3 bg-black flex items-center justify-center">
+          <div className={ratio < 1 ? "w-full max-w-[320px]" : ratio === 1 ? "w-full max-w-[520px]" : "w-full"}>
+            <AspectRatio ratio={ratio}>
+              <video src={renderedVideoUrl} controls className="w-full h-full rounded bg-black object-contain" />
+            </AspectRatio>
+          </div>
+        </CardContent>
+      ) : (
+        <div ref={containerRef} className="bg-black flex flex-col">
+          <audio ref={audioRef} className="hidden" />
+          <div className="w-full flex items-center justify-center p-3">
+            <div className={ratio < 1 ? "w-full max-w-[320px]" : ratio === 1 ? "w-full max-w-[520px]" : "w-full"}>
+              <AspectRatio ratio={ratio}>
+                <canvas
+                  ref={canvasRef}
+                  width={width}
+                  height={height}
+                  className="w-full h-full rounded border border-border/30"
+                />
+              </AspectRatio>
+            </div>
+          </div>
 
-          <span className="text-xs text-neutral-400 font-mono ml-2">
-            Scene {activeSceneIndex + 1} / {storyboard.scenes.length}
-          </span>
+          <CardContent className="p-3 bg-card border-t border-border space-y-2.5">
+            <Slider
+              value={[overallPercent]}
+              max={100}
+              step={0.5}
+              onValueChange={([val]) => {
+                const targetIdx = Math.min(
+                  storyboard.scenes.length - 1,
+                  Math.floor((val / 100) * storyboard.scenes.length)
+                );
+                setSceneProgress(0);
+                onSceneChange(Math.max(0, targetIdx));
+              }}
+              className="cursor-pointer"
+            />
+
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <ButtonGroup>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => {
+                      setSceneProgress(0);
+                      onSceneChange(Math.max(0, safeIndex - 1));
+                    }}
+                    disabled={safeIndex === 0}
+                    className="size-8 cursor-pointer"
+                  >
+                    <IconPlayerSkipBack className="size-4" />
+                  </Button>
+
+                  <Button
+                    size="icon"
+                    onClick={() => setIsPlaying(!isPlaying)}
+                    className="size-8 cursor-pointer"
+                  >
+                    {isPlaying ? (
+                      <IconPlayerPause className="size-4" />
+                    ) : (
+                      <IconPlayerPlay className="size-4" />
+                    )}
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => {
+                      setSceneProgress(0);
+                      onSceneChange(Math.min(storyboard.scenes.length - 1, safeIndex + 1));
+                    }}
+                    disabled={safeIndex >= storyboard.scenes.length - 1}
+                    className="size-8 cursor-pointer"
+                  >
+                    <IconPlayerSkipForward className="size-4" />
+                  </Button>
+                </ButtonGroup>
+
+                <span className="text-xs text-muted-foreground font-mono tabular-nums">
+                  {formatTime(currentElapsedSec)} / {formatTime(totalDurationSec)}
+                </span>
+                <span className="text-xs text-muted-foreground hidden sm:inline">
+                  · Scene {safeIndex + 1} of {storyboard.scenes.length}
+                  {activeScene.audioDataUrl ? " · Voice Ready" : " · No Voice Audio"}
+                </span>
+              </div>
+
+              <ButtonGroup>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setIsMuted(!isMuted)}
+                  className="size-8 cursor-pointer"
+                  title={isMuted ? "Unmute" : "Mute"}
+                >
+                  {isMuted ? <IconVolumeOff className="size-4" /> : <IconVolume className="size-4" />}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleFullscreen}
+                  className="size-8 cursor-pointer"
+                  title="Fullscreen"
+                >
+                  <IconMaximize className="size-4" />
+                </Button>
+              </ButtonGroup>
+            </div>
+          </CardContent>
         </div>
-
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-[10px] font-mono border-white/20 text-neutral-300">
-            Total {storyboard.totalDurationSeconds}s
-          </Badge>
-        </div>
-      </CardContent>
+      )}
     </Card>
   );
 }

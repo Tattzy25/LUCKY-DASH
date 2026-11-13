@@ -17,7 +17,6 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
-  CommandShortcut,
 } from "@/components/ui/command";
 import {
   IconSearch,
@@ -31,7 +30,6 @@ import {
   IconChartBar,
   IconSettings,
   IconPlugConnected,
-  IconSparkles as IconAI,
 } from "@tabler/icons-react";
 
 interface SiteHeaderProps {
@@ -47,18 +45,14 @@ const tabTitles: Record<string, string> = {
   blog: "Blog Composer Studio",
   podcast: "Podcast Audio Studio",
   video: "Video Production Studio",
-  library: "Generations & Publications Log",
+  library: "Generations Archive",
   analytics: "Pipeline Analytics",
   settings: "System Configuration",
-  connections: "Integrations & APIs",
-  help: "Documentation & Workflow Guide",
+  connections: "Publishing & Export",
+  help: "Workflow Guide",
 };
 
-export function SiteHeader({
-  activeTab,
-  onSelectTab,
-  onQuickCreate,
-}: SiteHeaderProps) {
+export function SiteHeader({ activeTab, onSelectTab, onQuickCreate }: SiteHeaderProps) {
   const [open, setOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -87,12 +81,9 @@ export function SiteHeader({
             className="mx-1 lg:mx-2 data-[orientation=vertical]:h-4"
           />
           <div className="flex items-center gap-2">
-            <h1 className="text-sm lg:text-base font-semibold tracking-tight text-foreground">
-              {tabTitles[activeTab] || "Enterprise Content Studio"}
+            <h1 className="text-sm lg:text-base font-semibold tracking-tight text-foreground whitespace-nowrap">
+              {tabTitles[activeTab] || "Content Studio"}
             </h1>
-            <span className="hidden md:inline-flex rounded bg-primary/10 text-primary text-[10px] font-mono px-1.5 py-0.5 font-medium">
-              v2.4
-            </span>
           </div>
 
           <div className="mx-auto flex max-w-md flex-1 items-center justify-center py-[3px]">
@@ -104,7 +95,7 @@ export function SiteHeader({
                 <IconSearch className="size-4 text-muted-foreground" />
               </InputGroupAddon>
               <InputGroupInput
-                placeholder="Search workflows, sources, drafts... (⌘K)"
+                placeholder="Jump to workspace module... (⌘K)"
                 readOnly
                 className="cursor-pointer text-xs"
               />
@@ -121,73 +112,64 @@ export function SiteHeader({
                 size="sm"
                 variant="outline"
                 onClick={onQuickCreate}
-                className="hidden sm:inline-flex text-xs h-8 gap-1.5 cursor-pointer font-medium"
+                className="hidden sm:inline-flex text-xs h-8 gap-1.5 cursor-pointer font-medium whitespace-nowrap"
               >
-                <IconAI className="size-3.5 text-primary" />
+                <IconSparkles className="size-3.5 text-primary" />
                 <span>Compose Post</span>
               </Button>
             )}
-
             <ModeToggle />
           </div>
         </div>
       </header>
 
       <CommandDialog open={open} onOpenChange={setOpen}>
-        <CommandInput placeholder="Type to search content, sources, or switch modules..." />
+        <CommandInput placeholder="Switch module..." />
         <CommandList>
-          <CommandEmpty>No matching modules or content found.</CommandEmpty>
+          <CommandEmpty>No matching modules found.</CommandEmpty>
           <CommandGroup heading="Content Workflows">
             <CommandItem onSelect={() => handleSelect("dashboard")}>
               <IconDashboard className="size-4 mr-2" />
               <span>Command Center</span>
-              <CommandShortcut>⌘D</CommandShortcut>
             </CommandItem>
             <CommandItem onSelect={() => handleSelect("sources")}>
               <IconFolders className="size-4 mr-2" />
               <span>Sources Hub (Video, Audio, Files, Web)</span>
-              <CommandShortcut>⌘S</CommandShortcut>
             </CommandItem>
             <CommandItem onSelect={() => handleSelect("pitch")}>
               <IconSparkles className="size-4 mr-2" />
               <span>Pitch & Angle Extraction</span>
-              <CommandShortcut>⌘P</CommandShortcut>
             </CommandItem>
             <CommandItem onSelect={() => handleSelect("blog")}>
               <IconFileText className="size-4 mr-2" />
               <span>Blog Composer Studio</span>
-              <CommandShortcut>⌘B</CommandShortcut>
             </CommandItem>
             <CommandItem onSelect={() => handleSelect("podcast")}>
               <IconHeadphones className="size-4 mr-2" />
               <span>Podcast Audio Studio</span>
-              <CommandShortcut>⌘O</CommandShortcut>
             </CommandItem>
             <CommandItem onSelect={() => handleSelect("video")}>
               <IconVideo className="size-4 mr-2" />
               <span>Video Production Studio</span>
-              <CommandShortcut>⌘V</CommandShortcut>
             </CommandItem>
             <CommandItem onSelect={() => handleSelect("library")}>
               <IconArchive className="size-4 mr-2" />
-              <span>Generations & Publications Log</span>
-              <CommandShortcut>⌘L</CommandShortcut>
+              <span>Generations Archive</span>
             </CommandItem>
             <CommandItem onSelect={() => handleSelect("analytics")}>
               <IconChartBar className="size-4 mr-2" />
               <span>Pipeline Analytics</span>
-              <CommandShortcut>⌘A</CommandShortcut>
             </CommandItem>
           </CommandGroup>
           <CommandSeparator />
-          <CommandGroup heading="System & Configuration">
+          <CommandGroup heading="System">
             <CommandItem onSelect={() => handleSelect("settings")}>
               <IconSettings className="size-4 mr-2" />
               <span>System Settings</span>
             </CommandItem>
             <CommandItem onSelect={() => handleSelect("connections")}>
               <IconPlugConnected className="size-4 mr-2" />
-              <span>Integrations & API Keys</span>
+              <span>Publishing & Export</span>
             </CommandItem>
           </CommandGroup>
         </CommandList>

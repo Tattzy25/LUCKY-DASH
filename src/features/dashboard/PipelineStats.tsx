@@ -4,63 +4,66 @@ import {
   IconFileText,
   IconHeadphones,
   IconVideo,
-  IconShieldCheck,
+  IconClock,
 } from "@tabler/icons-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { useContent } from "@/context/ContentContext";
 
 export function PipelineStats() {
   const { sources, pitchState, blogPosts, podcastEpisodes, videoStoryboards } = useContent();
 
+  const selectedSources = sources.filter((s) => s.selectedForPitch).length;
+  const totalWords = blogPosts.reduce(
+    (acc, post) => acc + post.content.split(/\s+/).filter(Boolean).length,
+    0
+  );
+  const avgWords = blogPosts.length > 0 ? Math.round(totalWords / blogPosts.length) : 0;
+  const totalVideoSeconds = videoStoryboards.reduce(
+    (acc, v) => acc + (v.totalDurationSeconds || 0),
+    0
+  );
+  const readyVoiceClips = videoStoryboards.reduce(
+    (acc, v) => acc + v.scenes.filter((s) => !!s.audioDataUrl).length,
+    0
+  );
+  const readyPodcastAudio = podcastEpisodes.filter((p) => !!p.audioDataUrl).length;
+
   const stats = [
     {
       title: "Sources Ingested",
       value: sources.length,
-      subtitle: `${sources.filter((s) => s.type === "video" || s.type === "audio").length} media, ${sources.filter((s) => s.type === "file" || s.type === "web_search").length} text/web`,
+      subtitle: `${selectedSources} selected for synthesis`,
       icon: IconFolders,
-      change: "+12 this week",
-      trend: "up",
     },
     {
-      title: "Pitches & Angles",
+      title: "Pitch Angles",
       value: pitchState?.pitches.length || 0,
-      subtitle: `${pitchState?.categories.length || 0} categorical clusters`,
+      subtitle: `${pitchState?.curatedHighlights.length || 0} extracted highlights`,
       icon: IconSparkles,
-      change: "4 guardrails active",
-      trend: "neutral",
     },
     {
-      title: "Blog Publications",
+      title: "Blog Posts",
       value: blogPosts.length,
-      subtitle: "Avg. 1,420 words / post",
+      subtitle: blogPosts.length > 0 ? `${avgWords.toLocaleString()} avg words` : "No drafts yet",
       icon: IconFileText,
-      change: "100% citation linked",
-      trend: "up",
     },
     {
       title: "Podcast Episodes",
       value: podcastEpisodes.length,
-      subtitle: "Dual-speaker audio scripts",
+      subtitle: `${readyPodcastAudio} with synthesized audio`,
       icon: IconHeadphones,
-      change: "Voice playback ready",
-      trend: "up",
     },
     {
-      title: "Video Storyboards",
+      title: "Video Projects",
       value: videoStoryboards.length,
-      subtitle: "Scene motion & AI prompts",
+      subtitle: `${totalVideoSeconds}s total · ${readyVoiceClips} voiced scenes`,
       icon: IconVideo,
-      change: "Multi-aspect formats",
-      trend: "up",
     },
     {
-      title: "Citation Grounding",
-      value: "98.4%",
-      subtitle: "Audit-trailed source facts",
-      icon: IconShieldCheck,
-      change: "Zero hallucinations",
-      trend: "up",
+      title: "Total Words",
+      value: totalWords.toLocaleString(),
+      subtitle: `${blogPosts.filter((b) => b.status === "published").length} published`,
+      icon: IconClock,
     },
   ];
 
@@ -69,30 +72,22 @@ export function PipelineStats() {
       {stats.map((stat, i) => {
         const Icon = stat.icon;
         return (
-          <Card key={i} className="border-border bg-card/50 hover:bg-card transition-all">
+          <Card key={i} className="border-border bg-card">
             <CardContent className="p-4 flex flex-col justify-between h-full gap-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-muted-foreground truncate">
                   {stat.title}
                 </span>
-                <div className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
-                  <Icon className="size-4" />
-                </div>
+                <Icon className="size-4 text-primary shrink-0" />
               </div>
 
               <div>
-                <div className="text-2xl font-bold tracking-tight text-foreground">
+                <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
                   {stat.value}
                 </div>
                 <p className="text-[11px] text-muted-foreground truncate mt-0.5">
                   {stat.subtitle}
                 </p>
-              </div>
-
-              <div className="pt-1 border-t border-border/40 flex items-center justify-between">
-                <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-mono">
-                  {stat.change}
-                </Badge>
               </div>
             </CardContent>
           </Card>

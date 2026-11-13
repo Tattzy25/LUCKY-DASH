@@ -43,16 +43,10 @@ function Button({
   variant = "default",
   size = "default",
   asChild = false,
-  onPress,
-  isDisabled,
-  onClick,
-  disabled,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean;
-    onPress?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-    isDisabled?: boolean;
   }) {
   const Comp = asChild ? Slot.Root : "button";
 
@@ -61,11 +55,6 @@ function Button({
       data-slot="button"
       data-variant={variant}
       data-size={size}
-      disabled={disabled ?? isDisabled}
-      onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-        onClick?.(e);
-        onPress?.(e);
-      }}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />

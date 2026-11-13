@@ -1,93 +1,200 @@
+import { useState } from "react";
 import {
   IconPlugConnected,
+  IconSend,
+  IconDownload,
   IconCheck,
-  IconWorld,
-  IconBroadcast,
-  IconBrandYoutube,
-  IconCloud,
+  IconLoader,
 } from "@tabler/icons-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useContent } from "@/context/ContentContext";
+import { toast } from "sonner";
 
 export function ConnectionsView() {
-  const integrations = [
-    {
-      name: "Enterprise Headless CMS",
-      type: "Publishing Target",
-      icon: IconWorld,
-      status: "Connected",
-      desc: "Direct webhook and REST push to WordPress VIP, Webflow, Ghost, or Contentful.",
-    },
-    {
-      name: "Podcast Syndication Feed (RSS / Apple / Spotify)",
-      type: "Audio Distribution",
-      icon: IconBroadcast,
-      status: "Configured",
-      desc: "Automated XML generation with chapter markers and audio enclosures.",
-    },
-    {
-      name: "Video Asset Storage & YouTube API",
-      type: "Video Publishing",
-      icon: IconBrandYoutube,
-      status: "Ready",
-      desc: "Direct storyboard export, SRT subtitle upload, and keyframe rendering.",
-    },
-    {
-      name: "Cloud Media Storage (S3 / Cloud Storage)",
-      type: "Source Storage",
-      icon: IconCloud,
-      status: "Active",
-      desc: "Encrypted object store for raw webinars, MP3 recordings, and PDF whitepapers.",
-    },
-  ];
+  const { settings, updateSettings, blogPosts, activeBlogPost } = useContent();
+  const [webhookUrl, setWebhookUrl] = useState(settings.webhookUrl || "");
+  const [selectedPostId, setSelectedPostId] = useState(activeBlogPost?.id || blogPosts[0]?.id || "");
+  const [isSending, setIsSending] = useState(false);
+  const [savedUrl, setSavedUrl] = useState(false);
+
+  const selectedPost = blogPosts.find((b) => b.id === selectedPostId) || activeBlogPost || blogPosts[0];
+
+  const handleSaveWebhook = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateSettings({ webhookUrl: webhookUrl.trim() });
+    setSavedUrl(true);
+    toast.success("Webhook endpoint saved.");
+    setTimeout(() => setSavedUrl(false), 2000);
+  };
+
+  const handlePublishWebhook = async () => {
+    const targetUrl = webhookUrl.trim() || settings.webhookUrl?.trim();
+    if (!targetUrl) {
+      toast.error("Enter a valid https:// webhook URL first.");
+      return;
+    }
+    if (!selectedPost) {
+      toast.error("Generate or select a blog post to publish.");
+      return;
+    }
+
+    setIsSending(true);
+    try {
+      const res = await fetch("/api/publish/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          webhookUrl: targetUrl,
+          payload: {
+            title: selectedPost.title,
+            slug: selectedPost.slug,
+            metaDescription: selectedPost.metaDescription,
+            keywords: selectedPost.keywords,
+            category: selectedPost.category,
+            contentMarkdown: selectedPost.content,
+            publishedAt: new Date().toISOString(),
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      toast.success(`Published to webhook (HTTP ${data.status}).`);
+    } catch (err: any) {
+      toast.error(err?.message || "Webhook delivery failed.");
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleExportMarkdown = () => {
+    if (!selectedPost) {
+      toast.error("No blog post available to export.");
+      return;
+    }
+    const frontmatter = [
+      "---",
+      `title: "${selectedPost.title.replace(/"/g, '\\"')}"`,
+      `slug: "${selectedPost.slug}"`,
+      `description: "${selectedPost.metaDescription.replace(/"/g, '\\"')}"`,
+      `date: "${selectedPost.createdAt}"`,
+      `keywords: [${selectedPost.keywords.map((k) => `"${k}"`).join(", ")}]`,
+      "---",
+      "",
+      selectedPost.content,
+    ].join("\n");
+
+    const blob = new Blob([frontmatter], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${selectedPost.slug || "post"}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="flex flex-1 flex-col gap-5 p-4 lg:p-6 max-w-4xl mx-auto w-full">
       <div className="flex items-center gap-2">
-        <div className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
-          <IconPlugConnected className="size-4" />
-        </div>
+        <IconPlugConnected className="size-5 text-primary" />
         <div>
           <h2 className="text-xl font-bold tracking-tight text-foreground">
-            Integrations & Publishing Targets
+            Publishing & Export Endpoints
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Connect your enterprise distribution endpoints and content repositories
+            Push generated content to any CMS webhook or export clean Markdown with frontmatter
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {integrations.map((item, i) => {
-          const Icon = item.icon;
-          return (
-            <Card key={i} className="border-border">
-              <CardContent className="p-4 flex flex-col justify-between h-full gap-3">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex size-8 items-center justify-center rounded bg-primary/10 text-primary">
-                      <Icon className="size-4" />
-                    </div>
-                    <Badge variant="outline" className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
-                      <IconCheck className="size-3 mr-1" />
-                      {item.status}
-                    </Badge>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-sm text-foreground">{item.name}</h3>
-                    <span className="text-[11px] text-muted-foreground font-mono">{item.type}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{item.desc}</p>
-                </div>
-                <Button variant="outline" size="sm" className="w-full text-xs h-8 cursor-pointer">
-                  Configure Endpoint
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold">Webhook CMS Publisher</CardTitle>
+          <CardDescription className="text-xs">
+            Sends a real JSON POST payload (title, slug, metaDescription, keywords, contentMarkdown) to your endpoint
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <form onSubmit={handleSaveWebhook} className="space-y-2">
+            <Label className="text-xs">Destination Webhook URL</Label>
+            <div className="flex gap-2">
+              <Input
+                type="url"
+                placeholder="https://your-cms.example.com/webhooks/publish"
+                value={webhookUrl}
+                onChange={(e) => setWebhookUrl(e.target.value)}
+                className="text-xs h-9"
+              />
+              <Button type="submit" variant="outline" size="sm" className="h-9 text-xs shrink-0 cursor-pointer">
+                {savedUrl ? (
+                  <>
+                    <IconCheck className="size-3.5 mr-1" />
+                    Saved
+                  </>
+                ) : (
+                  "Save URL"
+                )}
+              </Button>
+            </div>
+          </form>
+
+          <div className="space-y-2 pt-2 border-t border-border">
+            <Label className="text-xs">Select Article to Publish or Export</Label>
+            {blogPosts.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No blog posts created yet. Draft a post in Blog Studio first.
+              </p>
+            ) : (
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Select value={selectedPost?.id || ""} onValueChange={setSelectedPostId}>
+                  <SelectTrigger className="h-9 text-xs flex-1">
+                    <SelectValue placeholder="Choose a blog post" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {blogPosts.map((post) => (
+                      <SelectItem key={post.id} value={post.id}>
+                        {post.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handlePublishWebhook}
+                  disabled={isSending || !selectedPost}
+                  className="h-9 text-xs cursor-pointer"
+                >
+                  {isSending ? (
+                    <IconLoader className="size-3.5 mr-1 animate-spin" />
+                  ) : (
+                    <IconSend className="size-3.5 mr-1" />
+                  )}
+                  Send to Webhook
                 </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportMarkdown}
+                  disabled={!selectedPost}
+                  className="h-9 text-xs cursor-pointer"
+                >
+                  <IconDownload className="size-3.5 mr-1" />
+                  Download .MD
+                </Button>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

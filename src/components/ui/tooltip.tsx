@@ -23,36 +23,11 @@ function Tooltip({
 }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />;
 }
-Tooltip.displayName = "Tooltip";
 
 function TooltipTrigger({
-  children,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
-  const childArray = React.Children.toArray(children);
-  const tooltipChild = childArray.find(
-    (child) =>
-      React.isValidElement(child) &&
-      (child.type === Tooltip || (child.type as any)?.displayName === "Tooltip"),
-  );
-
-  if (tooltipChild && React.isValidElement(tooltipChild)) {
-    const nonTooltipChildren = childArray.filter((child) => child !== tooltipChild);
-    return (
-      <TooltipProvider delayDuration={100}>
-        <TooltipPrimitive.Root>
-          <TooltipPrimitive.Trigger asChild {...props}>
-            <span className="inline-flex">{nonTooltipChildren}</span>
-          </TooltipPrimitive.Trigger>
-          <TooltipContent>
-            {(tooltipChild.props as any).children}
-          </TooltipContent>
-        </TooltipPrimitive.Root>
-      </TooltipProvider>
-    );
-  }
-
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props}>{children}</TooltipPrimitive.Trigger>;
+  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
 }
 
 function TooltipContent({

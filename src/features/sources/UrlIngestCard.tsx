@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useContent } from "@/context/ContentContext";
+import { toast } from "sonner";
 
 export function UrlIngestCard() {
   const { addSource } = useContent();
@@ -28,11 +29,12 @@ export function UrlIngestCard() {
         body: JSON.stringify({ url: url.trim() }),
       });
 
-      if (!res.ok) throw new Error("URL ingestion failed");
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "URL ingestion failed");
       setUrlResult(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error ingesting URL:", err);
+      toast.error(err?.message || "URL ingestion failed.");
     } finally {
       setIsIngesting(false);
     }
@@ -56,20 +58,18 @@ export function UrlIngestCard() {
       setUrlResult(null);
       setUrl("");
       setAdded(false);
-    }, 1500);
+    }, 1200);
   };
 
   return (
     <Card className="border-border">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
-          <div className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <IconWorld className="size-4" />
-          </div>
+          <IconWorld className="size-4 text-primary" />
           <div>
-            <CardTitle className="text-sm font-semibold">Specific URL Content Scraper</CardTitle>
+            <CardTitle className="text-sm font-semibold">URL Content Extractor</CardTitle>
             <CardDescription className="text-xs">
-              Ingest a specific enterprise whitepaper, blog post, or article URL
+              Ingest a specific article, documentation page, or whitepaper URL
             </CardDescription>
           </div>
         </div>
@@ -77,7 +77,7 @@ export function UrlIngestCard() {
       <CardContent className="space-y-3">
         <form onSubmit={handleIngestUrl} className="flex gap-2">
           <Input
-            placeholder="https://techcrunch.com/article... or https://arxiv.org/abs/..."
+            placeholder="https://..."
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             className="text-xs h-9 bg-background"
@@ -91,11 +91,11 @@ export function UrlIngestCard() {
             {isIngesting ? (
               <>
                 <IconLoader className="size-3.5 animate-spin mr-1" />
-                Scraping...
+                Extracting...
               </>
             ) : (
               <>
-                <IconSparkles className="size-3.5 mr-1 text-primary-foreground" />
+                <IconSparkles className="size-3.5 mr-1" />
                 Ingest URL
               </>
             )}
@@ -124,7 +124,7 @@ export function UrlIngestCard() {
                     Added
                   </>
                 ) : (
-                  "+ Ingest into Sources"
+                  "+ Add to Sources"
                 )}
               </Button>
             </div>
@@ -134,14 +134,11 @@ export function UrlIngestCard() {
             </p>
 
             {urlResult.keyHighlights?.length > 0 && (
-              <div className="space-y-1">
-                <div className="text-[11px] font-medium text-foreground">Extracted Highlights:</div>
-                <ul className="text-[11px] text-muted-foreground list-disc pl-4 space-y-0.5">
-                  {urlResult.keyHighlights.slice(0, 3).map((h: string, idx: number) => (
-                    <li key={idx} className="line-clamp-1">{h}</li>
-                  ))}
-                </ul>
-              </div>
+              <ul className="text-[11px] text-muted-foreground list-disc pl-4 space-y-0.5">
+                {urlResult.keyHighlights.slice(0, 3).map((h: string, idx: number) => (
+                  <li key={idx} className="line-clamp-1">{h}</li>
+                ))}
+              </ul>
             )}
           </div>
         )}

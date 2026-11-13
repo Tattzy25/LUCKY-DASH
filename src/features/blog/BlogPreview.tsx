@@ -8,6 +8,15 @@ import {
 } from "@tabler/icons-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import type { BlogPost, SourceItem } from "@/types/content";
 
 interface BlogPreviewProps {
@@ -29,32 +38,32 @@ export function BlogPreview({ post, sources }: BlogPreviewProps) {
         const dataRows = tableRows.slice(2); // Skip separator
 
         elements.push(
-          <div key={`table-${elements.length}`} className="my-5 overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-muted/50 border-b border-border">
-                <tr>
+          <div key={`table-${elements.length}`} className="my-5 rounded-lg border border-border overflow-hidden">
+            <Table className="text-xs">
+              <TableHeader className="bg-muted/50">
+                <TableRow>
                   {headerRow.map((h, i) => (
-                    <th key={i} className="p-2.5 font-semibold text-foreground">
+                    <TableHead key={i} className="h-9 px-3 text-xs font-semibold text-foreground whitespace-normal">
                       {h.trim()}
-                    </th>
+                    </TableHead>
                   ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {dataRows.map((r, rIdx) => {
                   const cells = r.split("|").filter((c) => c.trim().length > 0);
                   return (
-                    <tr key={rIdx} className="hover:bg-muted/20">
+                    <TableRow key={rIdx}>
                       {cells.map((cell, cIdx) => (
-                        <td key={cIdx} className="p-2.5 text-muted-foreground">
+                        <TableCell key={cIdx} className="px-3 py-2.5 text-xs text-muted-foreground whitespace-normal">
                           {cell.trim().replace(/\*\*(.*?)\*\*/g, "$1")}
-                        </td>
+                        </TableCell>
                       ))}
-                    </tr>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         );
         tableRows = [];
@@ -107,12 +116,11 @@ export function BlogPreview({ post, sources }: BlogPreviewProps) {
       // Blockquote
       if (line.startsWith("> ")) {
         elements.push(
-          <div
-            key={idx}
-            className="my-4 rounded-r-lg border-l-4 border-primary bg-primary/5 p-3.5 text-xs sm:text-sm text-foreground/90 italic leading-relaxed"
-          >
-            {line.replace("> ", "").replace(/\*\*(.*?)\*\*/g, "$1")}
-          </div>
+          <Alert key={idx} className="my-4 bg-muted/40">
+            <AlertDescription className="text-xs sm:text-sm text-foreground/90 italic leading-relaxed">
+              {line.replace("> ", "").replace(/\*\*(.*?)\*\*/g, "$1")}
+            </AlertDescription>
+          </Alert>
         );
         return;
       }
